@@ -1,104 +1,179 @@
 # ASPIRADORA DE GAMA ALTA
 
 ## Objetivo de la práctica
-El objetivo de esta práctica es desarrollar un sistema de planificación y navegación para una aspiradora robótica que recorra una vivienda de manera eficiente sobre un mapa dividido por celdas, y usando el simulador Gazebo ademas de un mapa 2D de la vivienda a limpiar.
 
-El desarrollo de la practica lo he llevado a cabo en tres bloques principales:
+El objetivo de esta práctica es desarrollar un sistema de planificación y navegación para una aspiradora robótica capaz de recorrer una vivienda utilizando un mapa 2D dividido en celdas y el simulador Gazebo.
 
-**Registro del mapa** --> **Planificación de la cobertura** --> **Ejecución del recorrido**
+La implementación se divide en tres bloques principales:
 
-La implementación actual ha usado el algoritmo BSA (Backtracking Spiral Algorithm) para desarrollar el registro y procesamiento del mapa además de la planificación.
+**Procesamiento del mapa → Planificación de la cobertura → Ejecución del recorrido**
+
+Para la planificación se utiliza el algoritmo BSA (*Backtracking Spiral Algorithm*), complementado con una búsqueda en anchura (BFS) para encontrar caminos entre celdas libres y recuperar puntos de retorno pendientes.
 
 ---
 
 ### 1. Registro del sistema de referencia (Gazebo - Mapa)
-Para poder traducir las coordenadas continuas de Gazbo a los pixeles de la iamgen se ha usado una transformación afín estimada por mínimos cuadrados.
 
-* **Puntos de referencia:** se usan parejas de coordenadas que conocemos y que hemos registrado poco a poco tanto en el gazebo moviendo en este caso la aspiradora poco a poco a 10 posiciones distintas, como en el mapa usando gimp para relacionar las 10 posiciones de gazebo con 10 coordenadas de la imagen (`puntos_gazebo`, `puntos_gimp`) para calcular las matrices de transformación directa e inversa.
+Para relacionar las coordenadas del simulador Gazebo, expresadas en metros, con los píxeles de la imagen del mapa, se calcula una transformación afín mediante mínimos cuadrados.
 
-* **Cálculo de la transformación:** Se resuelve el sistema mediante `np.linalg.lstsq()`.
+<img width="616" height="201" alt="image" src="https://github.com/user-attachments/assets/5a745334-2e06-49d5-ad1c-ffc6b0ce9c25" />
 
-* **Escala y conversión:** Se calcula el tamaño real de la celda en metros (`size_cell_m`) a partir de la escala obtenida y la definición en píxeles (`cell_px = 30`).
+- **Puntos de referencia:** se utilizan diez parejas de coordenadas conocidas, almacenadas en `puntos_gazebo` y `puntos_gimp`. Las posiciones del simulador se relacionan con sus correspondientes puntos de la imagen para calibrar la transformación.
+  <img width="596" height="223" alt="image" src="https://github.com/user-attachments/assets/44153851-6ad5-4848-b649-29ac1b1f3973" />
 
-// añadir foto de la matriz
+- **Cálculo de las transformaciones:** mediante `np.linalg.lstsq()` se obtienen las matrices `directa_T` e `inversa_T`, que permiten convertir coordenadas entre ambos sistemas de referencia.
+  <img width="646" height="112" alt="image" src="https://github.com/user-attachments/assets/883c0fde-34ad-4392-9afb-415d8a8048b4" />
 
+- **Escala y tamaño de celda:** se establece un tamaño de celda de 30 píxeles (`cell_px = 30`) y se estima su tamaño equivalente en metros mediante `size_cell_m`.
+- **Conversión de coordenadas:** las funciones `cell_to_gazebo()` y `gazebo_to_cell()` permiten pasar de una celda de la rejilla a las coordenadas del simulador y viceversa.
+
+La relación entre ambos sistemas permite construir el mapa discretizado y localizar la posición inicial del robot.
+
+```text
+Coordenadas Gazebo (m)
+          ↕
+Transformación afín
+          ↕
+Coordenadas del mapa (px)
+          ↕
+Rejilla de celdas
 ```
-
-Gazebo (m)  <--->  Matriz de transformación  <--->  Mapa (px)
-
-```
-
-Esta relación sienta la base para construir el gridmap y posicionar al robot en su celda inicial.
 
 ---
 
-### 2. Procesamiento del mapa y Gridmap
+### 2. Procesamiento del mapa y construcción del Gridmap
 
-Cargamos el mapa de la casa mediante WebGUI y lo procesamos con OpenCV, al mapa le vamos a aplicar ina **erosión** para poder ajustar el límite de las regiones y asi asegurar que los obstaculo quedan adecuadamente delimitados antes de discretizar.
+El mapa de la vivienda se carga mediante `WebGUI.getMap()` y se procesa utilizando OpenCV para preparar la información necesaria para la planificación.
 
-$$\text{Mapa original} \longrightarrow \text{Erosión morfológica} \longrightarrow \text{Mapa preparado}$$
+El procesamiento sigue esta secuencia:
 
-El mapa procesado permite diferenciar zona stransitables de obstaculos para estructurar la planificación:
+```text
+Mapa original → Erosión morfológica → Discretización → Matriz de ocupación
+```
 
-1. **Erosión morfológica:** Se aplica `cv2.erode()` sobre la imagen original para dilatar los obstáculos y prevenir colisiones cerca de las paredes.
-2. **Discretización en celdas:** La imagen se divide en una rejilla (`num_rows` x `num_columns`).
-3. **Matriz de ocupación:** A partir de `size_cell_m` y `cell_px` se subdivide el espacio en una cuadrícula:
+1. **Erosión morfológica:** se aplica `cv2.erode()` con un kernel de tamaño 4 × 4 para modificar los límites de las regiones representadas en el mapa y facilitar la identificación de obstáculos.
+2. **Discretización:** la imagen se divide en una rejilla de celdas de 30 × 30 píxeles, definida mediante `num_rows` y `num_columns`.
+3. **Cálculo de ocupación:** para cada celda se calcula la proporción de píxeles negros.
+4. **Clasificación de celdas:** se utiliza el umbral `taken = 0.07`. Si la proporción de píxeles negros supera este valor, la celda se marca como ocupada (`1`); en caso contrario, se considera libre (`0`).
+5. **Ajustes del mapa:** se incorporan determinadas celdas adicionales a la matriz de ocupación mediante `celdas_forzadas_obstaculo`, con el objetivo de representar obstáculos concretos del entorno.
 
-  * Para cada celda se analiza la proporción de píxeles ocupados respecto a un **umbral**.
-  * **Celda ocupada**: La proporción supera el umbral (zona a evitar).
-  * **Celda libre**: Candidata a ser transitada.
-
-  Toda esta información se almacena en una **matriz de ocupación**, generando el *gridmap* sobre el cual trabajará el algoritmo de cobertura.Si el porcentaje de píxeles negros en una celda supera el umbral `taken = 0.07`, se marca como obstáculo (`1`), de lo contrario se clasifica como libre (`0`).
+El resultado es `matriz_celdas_ocupadas`, que utiliza el planificador para determinar qué celdas puede atravesar el robot. La función `free_cell()` comprueba que una celda se encuentre dentro de los límites del mapa y no esté ocupada.
 
 ---
 
 ### 3. Planificación de cobertura mediante BSA (Backtracking Spiral Algorithm)
-El algoritmo **BSA** planifica el recorrido sobre la rejilla combinando avance por celdas contiguas y retroceso a celdas guardadas cuando la ruta queda bloqueada:
 
-* **Posición e inicio:** El robot arranca en la celda correspondiente a su posición inicial y se le asigna la dirección inicial según su orientación (`yaw_actual`).
-* **Direcciones de exploración (NESO):** Se evalúan las celdas contiguas en orden de prioridad **Norte → Este → Sur → Oeste** (`direcciones = [(-1,0), (0,1), (1,0), (0,-1)]`).
-* **Puntos de retorno y críticos:** Si hay más de una celda vecina disponible, la primera se explora y las demás se guardan como *puntos de retorno* (`pendientes_pts_retorno`). Si el robot no puede continuar, la celda actual se declara *punto crítico*.
-* **Reconexión mediante BFS:** Al encallarse en un punto crítico, el algoritmo usa **Búsqueda en Anchura (BFS)** (`searching_path()`) para encontrar el camino libre más corto hacia el punto de retorno pendiente más cercano.
-* **Visualización:** Se dibuja el avance en tiempo real a través de `WebGUI.showNumpy()` pintando obstáculos (negro), celdas visitadas (verde), puntos de retorno (azul) y puntos críticos (rojo).
+El algoritmo BSA genera un recorrido sobre la rejilla, avanzando por celdas libres no visitadas y almacenando alternativas para poder regresar a ellas cuando la exploración queda bloqueada.
+
+#### Posición inicial y direcciones
+
+La posición inicial se obtiene a partir del primer punto de referencia del mapa. La orientación inicial del robot, proporcionada por `HAL.getPose3d().yaw`, se transforma al sistema de coordenadas de la imagen para determinar la dirección de exploración.
+
+Se utilizan cuatro direcciones:
+
+- Norte: `(-1, 0)`
+- Este: `(0, 1)`
+- Sur: `(1, 0)`
+- Oeste: `(0, -1)`
+
+La lista `direcciones` permite evaluar las celdas vecinas siguiendo el orden de exploración establecido.
+
+#### Avance y puntos de retorno
+
+En cada iteración se buscan las celdas vecinas libres que todavía no han sido visitadas. Si existen varias alternativas, se selecciona la primera según el orden de exploración y las restantes se almacenan como puntos de retorno.
+
+Las principales estructuras utilizadas son:
+
+- `celdas_visitadas`: registra las celdas marcadas como visitadas durante la planificación.
+- `bsa_rute`: almacena la secuencia de celdas que forman la ruta planificada.
+- `pts_retorno`: contiene los puntos de retorno pendientes.
+- `pendientes_pts_retorno`: permite identificar las alternativas de exploración que todavía deben recuperarse.
+- `pts_criticos`: registra las celdas donde la exploración se queda sin vecinos nuevos disponibles.
+
+Cuando no existen movimientos nuevos, el algoritmo busca el punto de retorno pendiente más cercano al que se pueda llegar.
+
+#### Búsqueda de caminos mediante BFS
+
+La función `searching_path()` implementa una búsqueda en anchura (*Breadth-First Search*, BFS) sobre las celdas libres.
+
+El algoritmo explora las celdas vecinas, registra sus predecesoras y reconstruye el camino cuando encuentra el objetivo. Si no existe un camino, devuelve una lista vacía.
+
+Esta búsqueda permite conectar distintas zonas transitables del mapa y recuperar puntos de retorno sin atravesar las celdas marcadas como obstáculos.
+
+#### Visualización del recorrido
+
+La función `show_bsa()` genera una representación gráfica del estado de la planificación mediante `WebGUI.showNumpy()`.
+
+Los colores utilizados son:
+
+- **Negro:** obstáculos.
+- **Verde:** celdas visitadas durante la planificación.
+- **Rojo:** puntos críticos.
+- **Cian:** puntos de retorno pendientes.
+- **Azul oscuro:** celdas recorridas físicamente por el robot.
+- **Amarillo:** posición actual del robot en la visualización.
+
+La visualización permite observar la evolución de la planificación y comparar la ruta calculada con las posiciones reales del robot durante su ejecución.
 
 ---
 
 ### 4. Navegación local y control reactivo
-La función `move_to_cell()` ejecuta físicamente los movimientos planificados en el simulador:
 
-* **Control proporcional:** Ajusta las velocidades lineal (`HAL.setV`) y angular (`HAL.setW`) según la distancia y el error de orientación (`error_yaw`) al centro de la celda objetivo.
-* **Respuesta rápida al Bumper:** Mediante `HAL.getBumperData()`, si se detecta colisión física contra un obstáculo no mapeado, el robot ejecuta una maniobra de emergencia retrocediendo y girando para desbloquearse inmediatamente.
+Una vez calculada la ruta, la función `move_to_cell()` se encarga de desplazar físicamente el robot hacia el centro de cada celda objetivo.
+
+#### Control de movimiento
+
+El controlador utiliza la posición y orientación actuales del robot para calcular:
+
+- **Distancia al objetivo:** se obtiene a partir de la diferencia entre las coordenadas actuales y las coordenadas objetivo.
+- **Error angular:** se calcula mediante la diferencia entre la orientación deseada y la orientación actual, normalizada al intervalo \([-\pi,\pi]\).
+- **Velocidad lineal:** se ajusta en función de la distancia y del error angular.
+- **Velocidad angular:** se utiliza para orientar el robot hacia el objetivo y corregir su trayectoria.
+
+Las velocidades se aplican mediante `HAL.setV()` y `HAL.setW()`. Cuando el error angular supera un umbral, el robot gira antes de avanzar. Además, se limita la velocidad para mantener un movimiento controlado.
+
+#### Detección de obstáculos mediante láser
+
+La función `leer_laser()` obtiene los datos del sensor mediante `HAL.getLaserData()` y comprueba que exista una cantidad suficiente de medidas válidas.
+
+Los valores no finitos o no positivos se sustituyen por una distancia elevada para evitar que interfieran en los cálculos.
+
+A partir de las medidas se estiman las distancias mínimas a obstáculos en tres sectores:
+
+- **Frontal:** permite detectar obstáculos en la dirección de avance.
+- **Derecho:** permite identificar paredes cercanas a la derecha.
+- **Izquierdo:** permite identificar paredes cercanas a la izquierda.
+
+Cuando se detecta una pared frontal a corta distancia y el robot está orientado aproximadamente hacia ella, se detiene, comprueba si el objetivo está suficientemente cerca y, si es necesario, intenta recuperarse mediante una maniobra de retroceso y giro hacia el lado con mayor espacio disponible.
+
+Durante el desplazamiento también se reduce la velocidad lineal cuando hay obstáculos próximos y se aplican correcciones angulares para alejarse de las paredes laterales.
+
+#### Registro de la ejecución
+
+Durante el movimiento se registra la celda real del robot mediante `gazebo_to_cell()`. Las posiciones recorridas se almacenan en `celdas_recorridas`.
+
+Además, se muestran trazas de depuración con la celda actual, el objetivo, la distancia, el error angular, las velocidades lineal y angular y las distancias detectadas por el láser. Esta información facilita la identificación de problemas de navegación y de maniobras de recuperación.
 
 ---
 
-### 5. Conclusiones, problemas y resultados
+## 5. Implementación y navegación
 
+Entre los aspectos relevantes de la implementación se encuentran:
 
+- La calibración entre el mapa y el sistema de coordenadas del simulador mediante puntos de referencia.
+- La generación de una matriz de ocupación para identificar obstáculos y evitar las celdas no transitables.
+- La exploración sistemática de celdas libres mediante el algoritmo BSA.
+- La recuperación de rutas hacia puntos pendientes mediante búsqueda en anchura (BFS).
+- La corrección de la trayectoria utilizando la posición, la orientación y las distancias proporcionadas por el láser.
+- La visualización del mapa, los puntos de planificación y las celdas recorridas físicamente.
 
+Para ello, se han implementado funciones de transformación entre coordenadas, planificación de rutas, control del movimiento y detección de obstáculos. Además, se incorporan maniobras de retroceso y giro para intentar superar situaciones en las que el robot encuentra un bloqueo durante el desplazamiento.
 
+**Resultados y limitaciones:** no se ha conseguido completar la cobertura del mapa en la simulación. El principal motivo es que no se han podido calibrar adecuadamente las maniobras de evasión para resolver todos los bloqueos encontrados durante la navegación. Como consecuencia, algunas celdas quedan sin recorrer físicamente, aunque formen parte de la planificación inicial.
 
+---
+## 6. Muestra de funcionamiento
 
+En el siguiente vídeo se muestra el funcionamiento del código implementado. Se puede observar la fase de planificación de la cobertura del mapa mediante el algoritmo BSA y una parte del movimiento real del robot en Gazebo.
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+**Vídeo demostrativo:** [Localized Vacuum Cleaner – Muestra de funcionamiento](https://youtu.be/rlQDo79swc8)
