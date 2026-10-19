@@ -78,3 +78,6 @@ La combinación de la máquina de estados, la navegación por waypoints y la det
 En el video se puede observar cómo el dron recorre la zona de búsqueda y pasa varias veces por las mismas posiciones donde se encuentran los supervivientes. Sin embargo, no los registra de nuevo cada vez que los detecta, ya que se ha implementado un sistema para evitar duplicados.
 
 Este sistema compara las coordenadas de cada nueva detección con las de los supervivientes registrados anteriormente. Si la distancia entre ambas posiciones es inferior a 4 metros (`DIST_DUPLICADOS = 4`), la detección se considera duplicada y no se añade a la lista. De esta forma, se evita contabilizar varias veces al mismo superviviente y se mantiene un registro más fiable de los encontrados.
+Ademas, aunque no se vea por el aterriaje forzoso del final, el dorn nos muestra todas las coordenadas de los supervivientes juntas al final de la ejecucion.
+
+https://youtu.be/BVQ5LUxotX4
