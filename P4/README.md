@@ -1,4 +1,4 @@
-# Práctica - Amazon Warehouse
+# Práctica 4 - Amazon Warehouse
 Esta práctica consiste en programar un robot logístico para que mueva de forma autónoma las 6 estanterías del almacén
 Warehouse 1 hasta unas posiciones de destino. Para ello, hemos utilizado la biblioteca de planificación OMPL junto con
 un pilotaje reactivo que utiliza únicamente la posición del robot (odometría), organizado todo mediante una máquina de estados.
@@ -43,7 +43,8 @@ algoritmo aleatorio, si no encuentra solución volvemos a planificar en la sigui
 Para seguir la ruta, el robot se dirige de punto en punto. Calculamos el error angular entre la orientación deseada y
 la actual, normalizado entre -π y π:
 
-$$e_\theta = \operatorname{atan2}\big(\sin(\theta_{obj}-\theta),\ \cos(\theta_{obj}-\theta)\big)$$
+<img width="373" height="53" alt="image" src="https://github.com/user-attachments/assets/ba42bc40-e2a7-4e49-8e73-4e29bd1c3d45" />
+
 
 Si el error es grande, el robot gira sobre sí mismo, y si es pequeño avanza corrigiendo el rumbo con una velocidad
 angular proporcional al error y una velocidad lineal que depende de la distancia al punto.
@@ -110,11 +111,7 @@ Al salir marcha atrás, retrocedemos 2,10 m desde la estantería y hasta 2,25 m 
 Al principio el robot chocaba con las estanterías al acercarse y no las dejaba bien colocadas. Lo hemos mejorado
 añadiendo márgenes de seguridad y entrando siempre en línea recta a la estantería.
 
-Otro problema ha sido mantener el mapa actualizado: había que borrar la estantería al levantarla y marcar las ya
-entregadas, porque si no el planificador no encontraba camino o chocaba con ellas.
-
-En el apartado a), aproximar la estantería con un círculo no es una solución perfecta, ya que se pierde espacio libre o
-las esquinas pueden rozar. Por eso en los siguientes apartados pasamos a usar mallas de puntos.
+Otro problema encontrado fue la adaptación del movimiento holonómico al modelo Ackermann, lo que me obligó a ajustar las dimensiones y la planificación de las rutas. También tuve que conseguir que el robot pudiera desplazarse correctamente durante todas las fases del proceso, evitando colisiones tanto al pasar cerca de las estanterías como al recogerlas y dejarlas en sus nuevas posiciones.
 
 En el apartado c) lo que más me ha costado ha sido adaptar el seguimiento al robot Ackermann. Con la marcha atrás hubo
 que dividir la ruta en tramos, frenar entre ellos y suavizar la velocidad inicial para evitar tirones.
@@ -126,8 +123,8 @@ después al robot Ackermann nos ha permitido ver cómo se van añadiendo restric
 
 ## Videos de la solucion en cada apartado
 
-[Video del apartado a)](ENLACE)
+[Video del apartado a)](https://youtu.be/MGuZnwf33Ek)
 
-[Video del apartado b)](ENLACE)
+[Video del apartado b)](https://youtu.be/7U9s-jdEEJU)
 
-[Video del apartado c)](ENLACE)
+[Video del apartado c)](https://youtu.be/Hqu-Tsu88qg)
