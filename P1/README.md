@@ -176,4 +176,11 @@ Para ello, se han implementado funciones de transformación entre coordenadas, p
 
 En el siguiente vídeo se muestra el funcionamiento del código implementado. Se puede observar la fase de planificación de la cobertura del mapa mediante el algoritmo BSA y una parte del movimiento real del robot en Gazebo.
 
-**Vídeo demostrativo:** [Localized Vacuum Cleaner – Muestra de funcionamiento](https://youtu.be/rlQDo79swc8)
+**Vídeo demostrativo:** 
+
+[Localized Vacuum Cleaner – Muestra de funcionamiento - Parte 1](https://youtu.be/3pQY1qlIynI)
+[Localized Vacuum Cleaner – Muestra de funcionamiento - Parte 2](https://youtu.be/036m9mvZJks)
+[Localized Vacuum Cleaner – Muestra de funcionamiento - Parte 3](https://youtu.be/LhRGBqGx5Sg)
+[Localized Vacuum Cleaner – Muestra de funcionamiento - Parte 4](https://youtu.be/yzzfTXLIDOk)
+[Localized Vacuum Cleaner – Muestra de funcionamiento - Parte 5](https://youtu.be/fQccSsAxSe8)
+[Localized Vacuum Cleaner – Muestra de funcionamiento - Parte 6](https://youtu.be/fkfmLveGLQA)
